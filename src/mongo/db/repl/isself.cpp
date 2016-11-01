@@ -47,19 +47,24 @@
 #include "mongo/util/scopeguard.h"
 #include "mongo/util/log.h"
 
-#if defined(__linux__) || defined(__APPLE__) || defined(__freebsd__) || defined(__sunos__) || \
-    defined(__openbsd__)
+/* Can't use FASTPATH_UNIX in Solaris 10 due to missing ifaddrs.h and getifaddrs() */
+#if defined(__linux__) || defined(__APPLE__) || defined(__freebsd__) || defined(__openbsd__)
 #define FASTPATH_UNIX 1
 #endif
 
-#if !defined(_WIN32) && !defined(FASTPATH_UNIX)
+#if !defined(_WIN32) && !defined(FASTPATH_UNIX) && !defined(__sunos__)
 #error isself needs to be implemented for this platform
 #endif
 
 
-#ifdef FASTPATH_UNIX
-#include <ifaddrs.h>
+/* Need netdb.h in Solaris for gai_strerror() */
+#if defined(FASTPATH_UNIX) || defined(__sunos__)
 #include <netdb.h>
+#endif /* defined(FASTPATH_UNIX) || defined(__sunos__) */
+
+#ifdef FASTPATH_UNIX
+
+#include <ifaddrs.h>
 
 #ifdef __freebsd__
 #include <netinet/in.h>
@@ -86,14 +91,14 @@ MONGO_INITIALIZER(GenerateInstanceId)(InitializerContext*) {
 
 namespace {
 
-/**
- * Helper to convert a message from a networking function to a string.
- * Needed because errnoWithDescription uses strerror on linux, when
- * we need gai_strerror.
- */
-std::string stringifyError(int code) {
-#if FASTPATH_UNIX
-    return gai_strerror(code);
+    /**
+     * Helper to convert a message from a networking function to a string.
+     * Needed because errnoWithDescription uses strerror on linux, when
+     * we need gai_strerror.
+     */
+    std::string stringifyError(int code) {
+#if FASTPATH_UNIX || defined(__sunos__)
+        return gai_strerror(code);
 #elif defined(_WIN32)
     // FormatMessage in errnoWithDescription works here on windows
     return errnoWithDescription(code);

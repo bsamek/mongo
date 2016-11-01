@@ -29,7 +29,6 @@
 
 #pragma once
 
-#include <string.h>  // strlen
 #include <string>
 #include <vector>
 

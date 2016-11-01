@@ -71,16 +71,16 @@
 #define HAVE_MEMORY_H 1
 
 /* Define to 1 if you have the `posix_fadvise' function. */
-#define HAVE_POSIX_FADVISE 1
+/* #define HAVE_POSIX_FADVISE 1 */
 
 /* Define to 1 if you have the `posix_fallocate' function. */
-#define HAVE_POSIX_FALLOCATE 1
+/* #define HAVE_POSIX_FALLOCATE 1 */
 
 /* Define to 1 if you have the `posix_madvise' function. */
-#define HAVE_POSIX_MADVISE 1
+/* #define HAVE_POSIX_MADVISE 1 */
 
 /* Define to 1 if you have the `posix_memalign' function. */
-#define HAVE_POSIX_MEMALIGN 1
+/* #define HAVE_POSIX_MEMALIGN 1 */
 
 /* Define to 1 if you have the <pthread_np.h> header file. */
 /* #undef HAVE_PTHREAD_NP_H */

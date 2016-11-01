@@ -82,6 +82,8 @@ functions:
       working_dir: src
       script: |
         set -o errexit
+        export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/tmp/usr/local/ssl/lib
+        chmod 0755 mongodb*/bin/*
         mongo_binary=$(find mongodb*/bin -name mongo${exe})
         # There should only be one mongo shell
         if [ $(echo $mongo_binary | wc -w) -ne 1 ]; then
@@ -177,10 +179,29 @@ functions:
         sed -i.bak "s/built-without-version-string/$(git describe)/" common/options/options.go
         sed -i.bak "s/built-without-git-spec/$(git rev-parse HEAD)/" common/options/options.go
 
+        export PATH="/cygdrive/c/mingw-w64/x86_64-4.9.1-posix-seh-rt_v3-rev1/mingw64/bin:/cygdrive/c/sasl/:$PATH"
+
         for i in bsondump mongostat mongofiles mongoexport mongoimport mongorestore mongodump mongotop mongooplog; do
              ${gorootvars} go build ${tooltags|} -o "../src/mongo-tools/$i${exe|}" $i/main/$i.go
              "../src/mongo-tools/$i${exe|}" --version
         done
+
+  "install openssl 1.0.1" :
+    command: shell.exec
+    params:
+      working_dir: src
+      script: |
+          if hostname | grep -q osx
+          then
+             curl http://boxes.10gen.com/build/openssl-osx-1.0.1l.tgz  | tar -zxf- -C /tmp
+          fi
+          if test -e /etc/redhat-release
+          then
+            if grep -q "release 5.5" /etc/redhat-release
+            then
+              curl http://boxes.10gen.com/build/openssl-rhel55-1.0.1h.tgz  | tar -zxf- -C /tmp
+            fi
+          fi
 
 pre:
   - command: shell.exec
@@ -242,6 +263,7 @@ tasks:
     - func: "setup credentials"
     - func: "build new tools" #noop if ${newtools} is not "true"
     - func: "build rocksdb" # noop if ${build_rocksdb} is not "true"
+    - func: "install openssl 1.0.1"
     - command: shell.exec
       type: test
       params:
@@ -260,9 +282,10 @@ tasks:
           rm -rf ${install_directory|/data/mongo-install-directory}
           ${scons|scons} ${compile_flags|} --use-new-tools all dist dist-debugsymbols distsrc-${ext|tgz} ${msi_target|}
 
-          git describe | ${python|python} buildscripts/generate_compile_expansions.py | tee compile_expansions.yml
+          # git describe | ${python|python} buildscripts/generate_compile_expansions.py | tee compile_expansions.yml
+          export version=3.0.14-splunk; echo -e "suffix: v$version\nsrc_suffix: v$version\nversion: $version" > compile_expansions.yml
 
-          ${asan_symbolizer} ${enable_lsan} ${python|python} buildscripts/smoke.py --with-cleanbb --mode files --from-file build/unittests.txt --dont-start-mongod  --report-file report.json core
+          ${ld_library_path} ${asan_symbolizer} ${enable_lsan} ${python|python} buildscripts/smoke.py --with-cleanbb --mode files --from-file build/unittests.txt --dont-start-mongod  --report-file report.json core
 
           mv mongodb-src-*.${ext|tgz} distsrc.${ext|tgz}
           mv mongodb-*-debugsymbols.${ext|tgz} mongo-debugsymbols.tgz || true
@@ -374,6 +397,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -390,7 +414,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} aggregation
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} aggregation
 
 - name: aggregation_auth
   depends_on:
@@ -399,6 +423,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -415,7 +440,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --auth aggregation
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --auth aggregation
 
 - name: aggregation_WT
   depends_on:
@@ -424,6 +449,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -440,7 +466,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --storageEngine=wiredTiger aggregation
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --storageEngine=wiredTiger aggregation
 
 - name: audit
   depends_on:
@@ -449,6 +475,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -465,7 +492,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} audit
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} audit
 
 - name: audit_WT
   depends_on:
@@ -474,6 +501,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -490,7 +518,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --storageEngine=wiredTiger audit
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --storageEngine=wiredTiger audit
 
 - name: auth
   depends_on:
@@ -499,6 +527,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -515,7 +544,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} auth
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} auth
 
 - name: auth_WT
   depends_on:
@@ -524,6 +553,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -540,7 +570,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --storageEngine=wiredTiger auth
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --storageEngine=wiredTiger auth
 
 - name: dbtest
   depends_on:
@@ -549,6 +579,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -565,7 +596,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${enable_lsan} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} dbtest
+          ${ld_library_path} ${asan_symbolizer} ${enable_lsan} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} dbtest
 
 - name: dbtest_WT
   depends_on:
@@ -574,6 +605,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -590,7 +622,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${enable_lsan} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --storageEngine=wiredTiger dbtest
+          ${ld_library_path} ${asan_symbolizer} ${enable_lsan} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --storageEngine=wiredTiger dbtest
 
 - name: disk
   depends_on:
@@ -599,6 +631,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -615,7 +648,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} disk
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} disk
 
 - name: durability
   depends_on:
@@ -624,6 +657,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -640,7 +674,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} dur
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} dur
 
 - name: failpoints
   depends_on:
@@ -649,6 +683,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -665,7 +700,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} failPoint
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} failPoint
 
 - name: failpoints_auth
   depends_on:
@@ -674,6 +709,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -690,7 +726,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --auth failPoint
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --auth failPoint
 
 - name: gle_auth
   depends_on:
@@ -699,6 +735,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -715,7 +752,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} gle --auth
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} gle --auth
 
 - name: gle_auth_WT
   depends_on:
@@ -724,6 +761,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -740,7 +778,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --storageEngine=wiredTiger gle --auth
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --storageEngine=wiredTiger gle --auth
 
 - name: gle_auth_write_cmd
   depends_on:
@@ -749,6 +787,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -765,7 +804,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} gle --auth --shell-write-mode commands
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} gle --auth --shell-write-mode commands
 
 - name: gle_auth_write_cmd_WT
   depends_on:
@@ -774,6 +813,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -790,7 +830,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --storageEngine=wiredTiger gle --auth --shell-write-mode commands
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --storageEngine=wiredTiger gle --auth --shell-write-mode commands
 
 - name: inMemoryExperiment
   depends_on:
@@ -799,6 +839,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -815,7 +856,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --storageEngine=inMemoryExperiment --report-file report.json ${test_flags|} js
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --storageEngine=inMemoryExperiment --report-file report.json ${test_flags|} js
 
 - name: jsCore
   depends_on:
@@ -824,6 +865,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -840,7 +882,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${enable_lsan} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --shell-write-mode commands jsCore
+          ${ld_library_path} ${asan_symbolizer} ${enable_lsan} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --shell-write-mode commands jsCore
 
 - name: jsCore_WT
   depends_on:
@@ -849,6 +891,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -865,7 +908,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${enable_lsan} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --shell-write-mode commands --storageEngine=wiredTiger jsCore
+          ${ld_library_path} ${asan_symbolizer} ${enable_lsan} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --shell-write-mode commands --storageEngine=wiredTiger jsCore
 
 - name: jsCore_compatibility
   depends_on:
@@ -874,6 +917,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -890,7 +934,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${enable_lsan} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --shell-write-mode compatibility jsCore
+          ${ld_library_path} ${asan_symbolizer} ${enable_lsan} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --shell-write-mode compatibility jsCore
 
 - name: jsCore_compatibility_WT
   depends_on:
@@ -899,6 +943,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -915,7 +960,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${enable_lsan} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --shell-write-mode compatibility  --storageEngine=wiredTiger jsCore
+          ${ld_library_path} ${asan_symbolizer} ${enable_lsan} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --shell-write-mode compatibility  --storageEngine=wiredTiger jsCore
 
 - name: jsCore_auth
   depends_on:
@@ -924,6 +969,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -940,7 +986,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --shell-write-mode commands  --auth jsCore
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --shell-write-mode commands  --auth jsCore
 
 - name: jsCore_small_oplog
   depends_on:
@@ -949,6 +995,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -965,7 +1012,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${enable_lsan} ${python|python} buildscripts/smoke.py --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --shell-write-mode commands  --small-oplog jsCore
+          ${ld_library_path} ${asan_symbolizer} ${enable_lsan} ${python|python} buildscripts/smoke.py --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --shell-write-mode commands  --small-oplog jsCore
 
 - name: jsCore_small_oplog_WT
   depends_on:
@@ -974,6 +1021,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -990,7 +1038,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${enable_lsan} ${python|python} buildscripts/smoke.py --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --shell-write-mode commands  --small-oplog --storageEngine=wiredTiger jsCore
+          ${ld_library_path} ${asan_symbolizer} ${enable_lsan} ${python|python} buildscripts/smoke.py --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --shell-write-mode commands  --small-oplog --storageEngine=wiredTiger jsCore
 
 - name: mongo-perf
   depends_on:
@@ -999,6 +1047,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -1022,6 +1071,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -1038,7 +1088,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} mmap_v1
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} mmap_v1
 
 - name: mongosTest
   depends_on:
@@ -1047,6 +1097,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -1063,7 +1114,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} mongosTest
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} mongosTest
 
 - name: multiversion
   depends_on:
@@ -1072,6 +1123,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -1090,7 +1142,7 @@ tasks:
           cp mongodb*/bin/* .
           rm -rf /data/install /data/multiversion
           ${python|python} buildscripts/setup_multiversion_mongodb.py /data/install /data/multiversion "base" "Linux/x86_64" "1.8" "2.0" "2.2" "2.4" "2.6"
-          PATH=$PATH:/data/multiversion ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} multiVersion
+          PATH=$PATH:/data/multiversion ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} multiVersion
 
 - name: noPassthrough
   depends_on:
@@ -1099,6 +1151,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -1115,7 +1168,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} noPassthrough
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} noPassthrough
 
 - name: noPassthrough_WT
   depends_on:
@@ -1124,6 +1177,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -1140,7 +1194,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --storageEngine=wiredTiger noPassthrough
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --storageEngine=wiredTiger noPassthrough
 
 - name: noPassthroughWithMongod
   depends_on:
@@ -1149,6 +1203,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -1165,7 +1220,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} noPassthroughWithMongod
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} noPassthroughWithMongod
 
 - name: noPassthroughWithMongod_WT
   depends_on:
@@ -1174,6 +1229,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -1190,7 +1246,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --storageEngine=wiredTiger noPassthroughWithMongod
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --storageEngine=wiredTiger noPassthroughWithMongod
 
 - name: slow1
   depends_on:
@@ -1199,6 +1255,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -1215,7 +1272,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} slow1
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} slow1
 
 - name: slow1_WT
   depends_on:
@@ -1224,6 +1281,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -1240,7 +1298,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --storageEngine=wiredTiger slow1
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --storageEngine=wiredTiger slow1
 
 - name: slow2
   depends_on:
@@ -1249,6 +1307,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -1266,7 +1325,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --clean-every=1 --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} slow2
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --clean-every=1 --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} slow2
 
 - name: slow2_WT
   depends_on:
@@ -1275,6 +1334,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -1292,7 +1352,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --clean-every=1 --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --storageEngine=wiredTiger slow2
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --clean-every=1 --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --storageEngine=wiredTiger slow2
 
 - name: parallel
   depends_on:
@@ -1301,6 +1361,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -1317,7 +1378,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} parallel
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} parallel
 
 - name: parallel_WT
   depends_on:
@@ -1326,6 +1387,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -1342,7 +1404,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --storageEngine=wiredTiger --wiredTigerEngineConfig=cache_size=1G parallel
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --storageEngine=wiredTiger --wiredTigerEngineConfig=cache_size=1G parallel
 
 - name: parallel_compatibility
   depends_on:
@@ -1351,6 +1413,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -1367,7 +1430,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --shell-write-mode compatibility  parallel
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --shell-write-mode compatibility  parallel
 
 - name: parallel_compatibility_WT
   depends_on:
@@ -1376,6 +1439,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -1392,7 +1456,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --shell-write-mode compatibility  --storageEngine=wiredTiger --wiredTigerEngineConfig=cache_size=1G parallel
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --shell-write-mode compatibility  --storageEngine=wiredTiger --wiredTigerEngineConfig=cache_size=1G parallel
 
 - name: concurrency
   depends_on:
@@ -1401,6 +1465,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -1417,7 +1482,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} concurrency
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} concurrency
 
 - name: concurrency_WT
   depends_on:
@@ -1426,6 +1491,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -1442,7 +1508,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --storageEngine=wiredTiger --wiredTigerEngineConfig=cache_size=1G concurrency
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --storageEngine=wiredTiger --wiredTigerEngineConfig=cache_size=1G concurrency
 
 - name: concurrency_compatibility
   depends_on:
@@ -1451,6 +1517,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -1467,7 +1534,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --shell-write-mode compatibility  concurrency
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --shell-write-mode compatibility  concurrency
 
 - name: concurrency_compatibility_WT
   depends_on:
@@ -1476,6 +1543,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -1492,7 +1560,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --shell-write-mode compatibility  --storageEngine=wiredTiger --wiredTigerEngineConfig=cache_size=1G concurrency
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --shell-write-mode compatibility  --storageEngine=wiredTiger --wiredTigerEngineConfig=cache_size=1G concurrency
 
 - name: replicasets
   depends_on:
@@ -1501,6 +1569,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -1517,7 +1586,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} replSets
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} replSets
 
 - name: replicasets_WT
   depends_on:
@@ -1526,6 +1595,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -1542,7 +1612,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --storageEngine=wiredTiger replSets
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --storageEngine=wiredTiger replSets
 
 - name: replicasets_auth
   depends_on:
@@ -1551,6 +1621,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -1567,7 +1638,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --auth replSets
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --auth replSets
 
 - name: replication
   depends_on:
@@ -1576,6 +1647,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -1592,7 +1664,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} repl
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} repl
 
 - name: replication_WT
   depends_on:
@@ -1601,6 +1673,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -1617,7 +1690,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --storageEngine=wiredTiger repl
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --storageEngine=wiredTiger repl
 
 - name: replication_auth
   depends_on:
@@ -1626,6 +1699,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -1642,7 +1716,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --auth repl
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --auth repl
 
 - name: sasl
   depends_on:
@@ -1651,6 +1725,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -1667,7 +1742,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} sasl
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} sasl
 
 - name: sharding
   depends_on:
@@ -1676,6 +1751,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -1692,7 +1768,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} sharding
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} sharding
 
 - name: sharding_WT
   depends_on:
@@ -1701,6 +1777,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -1717,7 +1794,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --storageEngine=wiredTiger sharding
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --storageEngine=wiredTiger sharding
 
 - name: sharding_auth
   depends_on:
@@ -1726,6 +1803,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -1742,7 +1820,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --auth sharding
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --auth sharding
 
 - name: snmp
   depends_on:
@@ -1751,6 +1829,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -1769,7 +1848,7 @@ tasks:
           cp mongodb*/bin/* .
           mkdir -p snmpconf
           cp -f src/mongo/db/modules/enterprise/docs/mongod.conf.master snmpconf/mongod.conf
-          SNMPCONFPATH=snmpconf ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} snmp
+          SNMPCONFPATH=snmpconf ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} snmp
 
 - name: snmp_WT
   depends_on:
@@ -1778,6 +1857,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -1796,7 +1876,7 @@ tasks:
           cp mongodb*/bin/* .
           mkdir -p snmpconf
           cp -f src/mongo/db/modules/enterprise/docs/mongod.conf.master snmpconf/mongod.conf
-          SNMPCONFPATH=snmpconf ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --storageEngine=wiredTiger snmp
+          $SNMPCONFPATH=snmpconf {ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --storageEngine=wiredTiger snmp
 
 - name: ssl
   depends_on:
@@ -1805,6 +1885,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -1821,7 +1902,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} ssl --use-ssl
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} ssl --use-ssl
 
 - name: sslSpecial
   depends_on:
@@ -1830,6 +1911,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -1846,7 +1928,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} sslSpecial
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} sslSpecial
 
 - name: tool
   depends_on:
@@ -1855,6 +1937,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -1871,7 +1954,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} tool
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} tool
 
 - name: tool_WT
   depends_on:
@@ -1880,6 +1963,7 @@ tasks:
     - func: "fetch artifacts"
     - func: "fetch binaries"
     - func: "extract binaries"
+    - func: "install openssl 1.0.1"
     - func: "check binary version"
     - func: "setup credentials"
     - func: "get buildnumber"
@@ -1896,7 +1980,7 @@ tasks:
           export MONGO_PHASE="${task_name}_${execution}"
 
           cp mongodb*/bin/* .
-          ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --storageEngine=wiredTiger tool
+          ${ld_library_path} ${asan_symbolizer} ${python|python} buildscripts/smoke.py --nopreallocj --with-cleanbb --mongod ./mongod --mongo ./mongo --report-file report.json ${test_flags|} --storageEngine=wiredTiger tool
 
 - name: push
   patchable: false
@@ -2340,7 +2424,82 @@ buildvariants:
     push_bucket: downloads.mongodb.org
     push_name: linux
     push_arch: x86_64
-    compile_flags: -j$(grep -c ^processor /proc/cpuinfo) --cc=/opt/mongodbtoolchain/bin/gcc --cxx=/opt/mongodbtoolchain/bin/g++ --release --variant-dir="linux2/release"
+    ld_library_path: LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/tmp/usr/local/ssl/lib
+    compile_flags: --ssl -j$(grep -c ^processor /proc/cpuinfo) --release --cc=/opt/mongodbtoolchain/bin/gcc CCFLAGS="-fpie" LINKFLAGS="-pie" --cxx=/opt/mongodbtoolchain/bin/g++ --libpath=/tmp/usr/local/ssl/lib --cpppath=/tmp/usr/local/ssl/include --static-libstdc++ --variant-dir="linux2/release"
+    test_flags: --continue-on-failure
+  tasks:
+  - name: compile
+    distros:
+    - rhel55-build
+  - name: lint
+  - name: aggregation
+  - name: aggregation_WT
+  - name: aggregation_auth
+  - name: auth
+  - name: auth_WT
+  - name: dbtest
+  - name: dbtest_WT
+  - name: disk
+  - name: durability
+  - name: failpoints
+  - name: failpoints_auth
+  - name: gle_auth
+  - name: gle_auth_WT
+  - name: gle_auth_write_cmd
+  - name: gle_auth_write_cmd_WT
+  - name: inMemoryExperiment
+  - name: jsCore
+  - name: jsCore_WT
+  - name: jsCore_auth
+  - name: jsCore_compatibility
+  - name: jsCore_compatibility_WT
+  - name: jsCore_small_oplog
+  - name: jsCore_small_oplog_WT
+  - name: mmap
+  - name: mongosTest
+  - name: noPassthrough
+  - name: noPassthrough_WT
+  - name: noPassthroughWithMongod
+  - name: noPassthroughWithMongod_WT
+  - name: parallel
+  - name: parallel_WT
+  - name: parallel_compatibility
+  - name: parallel_compatibility_WT
+  - name: concurrency
+  - name: concurrency_WT
+  - name: concurrency_compatibility
+  - name: concurrency_compatibility_WT
+  - name: replicasets
+  - name: replicasets_WT
+  - name: replicasets_auth
+  - name: replication
+  - name: replication_WT
+  - name: replication_auth
+  - name: sharding
+  - name: sharding_WT
+  - name: sharding_auth
+  - name: slow1
+  - name: slow1_WT
+  - name: slow2
+  - name: slow2_WT
+  - name: tool
+  - name: tool_WT
+  - name: push
+
+- name: linux-64-fstack
+  display_name: Linux 64-bit fstack
+  modules:
+  - mongo-tools
+  run_on:
+  - rhel55-test
+  expansions:
+    gorootvars: PATH=/opt/mongodbtoolchain/v2/bin:$PATH
+    push_path: linux
+    push_bucket: downloads.mongodb.org
+    push_name: linux
+    push_arch: x86_64
+    ld_library_path: LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/tmp/usr/local/ssl/lib
+    compile_flags: --ssl -j$(grep -c ^processor /proc/cpuinfo) --release --cc=/opt/mongodbtoolchain/bin/gcc CCFLAGS="-fpie -fstack-protector-all" LINKFLAGS="-pie" --cxx=/opt/mongodbtoolchain/bin/g++ --libpath=/tmp/usr/local/ssl/lib --cpppath=/tmp/usr/local/ssl/include --static-libstdc++ --variant-dir="linux2/release"
     test_flags: --continue-on-failure
   tasks:
   - name: compile
@@ -2414,7 +2573,7 @@ buildvariants:
     push_name: linux-debug
     push_arch: x86_64
     test_flags: --continue-on-failure
-    compile_flags: --dbg=on --opt=on -j$(grep -c ^processor /proc/cpuinfo) --cc=/opt/mongodbtoolchain/bin/gcc --cxx=/opt/mongodbtoolchain/bin/g++ --variant-dir="linux2/dbg_on/opt_on"
+    compile_flags: --dbg=on --opt=on -j$(grep -c ^processor /proc/cpuinfo) --cc=/opt/mongodbtoolchain/bin/gcc CCFLAGS="-fpie" LINKFLAGS="-pie" --cxx=/opt/mongodbtoolchain/bin/g++ --variant-dir="linux2/dbg_on/opt_on"
   tasks:
   - name: compile
     distros:
@@ -2479,7 +2638,7 @@ buildvariants:
     push_bucket: downloads.mongodb.org
     push_name: linux-duroff
     push_arch: x86_64
-    compile_flags: --durableDefaultOff -j$(grep -c ^processor /proc/cpuinfo) --cc=/opt/mongodbtoolchain/bin/gcc --cxx=/opt/mongodbtoolchain/bin/g++ --variant-dir="linux2/durableDefaultOff"
+    compile_flags: --durableDefaultOff -j$(grep -c ^processor /proc/cpuinfo) --cc=/opt/mongodbtoolchain/bin/gcc CCFLAGS="-fpie" LINKFLAGS="-pie" --cxx=/opt/mongodbtoolchain/bin/g++ --variant-dir="linux2/durableDefaultOff"
     test_flags: --continue-on-failure
   tasks:
   - name: compile
@@ -2524,7 +2683,7 @@ buildvariants:
   - rhel55-test
   expansions:
     gorootvars: PATH=/opt/mongodbtoolchain/v2/bin:$PATH
-    compile_flags: -j$(grep -c ^processor /proc/cpuinfo) --cc=/opt/mongodbtoolchain/bin/gcc --cxx=/opt/mongodbtoolchain/bin/g++ --release --variant-dir="linux2/release"
+    compile_flags: -j$(grep -c ^processor /proc/cpuinfo) --cc=/opt/mongodbtoolchain/bin/gcc CCFLAGS="-fpie" LINKFLAGS="-pie" --cxx=/opt/mongodbtoolchain/bin/g++ --release --variant-dir="linux2/release"
     test_flags: --continue-on-failure --wiredTigerCollectionConfig=type=lsm --wiredTigerIndexConfig=type=lsm
   tasks:
   - name: compile
@@ -2564,7 +2723,7 @@ buildvariants:
     push_bucket: downloads.mongodb.org
     push_name: linux
     push_arch: x86_64-ubuntu1204
-    compile_flags: --ssl --distmod=ubuntu1204 -j$(grep -c ^processor /proc/cpuinfo) --release --cc=/opt/mongodbtoolchain/bin/gcc --cxx=/opt/mongodbtoolchain/bin/g++ --variant-dir="linux2/release"
+    compile_flags: --ssl --distmod=ubuntu1204 -j$(grep -c ^processor /proc/cpuinfo) --release --cc=/opt/mongodbtoolchain/bin/gcc CCFLAGS="-fpie" LINKFLAGS="-pie" --cxx=/opt/mongodbtoolchain/bin/g++ --variant-dir="linux2/release"
     test_flags: --continue-on-failure
     has_packages: true
     packager_script: packager.py
@@ -2642,7 +2801,7 @@ buildvariants:
     push_bucket: downloads.mongodb.org
     push_name: linux
     push_arch: x86_64-ubuntu1404
-    compile_flags: --ssl --distmod=ubuntu1404 -j$(grep -c ^processor /proc/cpuinfo) --release --cc=/opt/mongodbtoolchain/bin/gcc --cxx=/opt/mongodbtoolchain/bin/g++ --variant-dir="linux2/release"
+    compile_flags: --ssl --distmod=ubuntu1404 -j$(grep -c ^processor /proc/cpuinfo) --release --cc=/opt/mongodbtoolchain/bin/gcc CCFLAGS="-fpie" LINKFLAGS="-pie" --cxx=/opt/mongodbtoolchain/bin/g++ --variant-dir="linux2/release"
     test_flags: --continue-on-failure
     has_packages: true
     packager_script: packager.py
@@ -2721,7 +2880,7 @@ buildvariants:
     push_bucket: downloads.10gen.com
     push_name: linux
     push_arch: x86_64-enterprise-amzn64
-    compile_flags: --ssl --distmod=amzn64 --release -j$(grep -c ^processor /proc/cpuinfo) --cc=/opt/mongodbtoolchain/bin/gcc --cxx=/opt/mongodbtoolchain/bin/g++ --variant-dir="linux2/release"
+    compile_flags: --ssl --distmod=amzn64 --release -j$(grep -c ^processor /proc/cpuinfo) --cc=/opt/mongodbtoolchain/bin/gcc CCFLAGS="-fpie" LINKFLAGS="-pie" --cxx=/opt/mongodbtoolchain/bin/g++ --variant-dir="linux2/release"
     test_flags: --authMechanism=SCRAM-SHA-1 --continue-on-failure
     has_packages: true
     packager_script: packager-enterprise.py
@@ -2769,7 +2928,7 @@ buildvariants:
     push_bucket: downloads.mongodb.org
     push_name: linux
     push_arch: x86_64-amazon
-    compile_flags: --ssl --distmod=amazon -j$(grep -c ^processor /proc/cpuinfo) --release --cc=/opt/mongodbtoolchain/bin/gcc --cxx=/opt/mongodbtoolchain/bin/g++ --variant-dir="linux2/release"
+    compile_flags: --ssl --distmod=amazon -j$(grep -c ^processor /proc/cpuinfo) --release --cc=/opt/mongodbtoolchain/bin/gcc CCFLAGS="-fpie" LINKFLAGS="-pie" --cxx=/opt/mongodbtoolchain/bin/g++ --variant-dir="linux2/release"
     test_flags: --continue-on-failure
     has_packages: true
     packager_script: packager.py
@@ -2847,7 +3006,7 @@ buildvariants:
     push_bucket: downloads.mongodb.org
     push_name: linux
     push_arch: i686
-    compile_flags: --release --distarch=i686 -j$(grep -c ^processor /proc/cpuinfo) --32 --cc=/opt/mongodbtoolchain/bin/gcc --cxx=/opt/mongodbtoolchain/bin/g++ --variant-dir="linux2/release"
+    compile_flags: --release --distarch=i686 -j$(grep -c ^processor /proc/cpuinfo) --32 --cc=/opt/mongodbtoolchain/bin/gcc CCFLAGS="-fpie" LINKFLAGS="-pie" --cxx=/opt/mongodbtoolchain/bin/g++ --variant-dir="linux2/release"
     test_flags: --continue-on-failure
   tasks:
   - name: compile
@@ -2882,7 +3041,7 @@ buildvariants:
     push_name: linux-debug
     push_arch: i686
     test_flags: --continue-on-failure
-    compile_flags: --dbg=on --distarch=i686 --opt=on -j$(grep -c ^processor /proc/cpuinfo) --32 --cc=/opt/mongodbtoolchain/bin/gcc --cxx=/opt/mongodbtoolchain/bin/g++ --variant-dir="linux2/debug"
+    compile_flags: --dbg=on --distarch=i686 --opt=on -j$(grep -c ^processor /proc/cpuinfo) --32 --cc=/opt/mongodbtoolchain/bin/gcc CCFLAGS="-fpie" LINKFLAGS="-pie" --cxx=/opt/mongodbtoolchain/bin/g++ --variant-dir="linux2/debug"
   tasks:
   - name: compile
     distros:
@@ -2906,8 +3065,8 @@ buildvariants:
 #         Windows buildvariants           #
 ###########################################
 
-- name: windows-64
-  display_name: Windows 64-bit
+- name: windows-64-ssl
+  display_name: SSL Windows 64-bit
   modules:
   - mongo-tools
   run_on:
@@ -2918,9 +3077,9 @@ buildvariants:
     push_bucket: downloads.mongodb.org
     push_name: win32
     push_arch: x86_64
-    msi_target: msi
+    # msi_target: msi
     content_type: application/zip
-    compile_flags: --release --64 -j$(grep -c ^processor /proc/cpuinfo)
+    compile_flags: --release --64 --ssl --distmod=ssl --extrapath="c:/openssl" -j$(grep -c ^processor /proc/cpuinfo) --dynamic-windows
     test_flags: --continue-on-failure
     ext: zip
   tasks:
@@ -3329,7 +3488,8 @@ buildvariants:
     push_name: osx-ssl
     push_arch: x86_64
     tooltags: "-tags ssl"
-    compile_flags: --ssl --allocator=system -j$(sysctl -n hw.logicalcpu) --release --osx-version-min=10.7 --libc++
+    ld_library_path: LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/tmp/Cellar/openssl/1.0.1l/lib
+    compile_flags: --ssl --distmod=ssl --allocator=system -j$(sysctl -n hw.logicalcpu) --release --osx-version-min=10.7 --libc++ --libpath=/tmp/Cellar/openssl/1.0.1l/lib --cpppath=/tmp/Cellar/openssl/1.0.1l/include
     num_jobs_unittests: $(sysctl -n hw.logicalcpu)
     test_flags: --continue-on-failure
   tasks:
@@ -3441,7 +3601,7 @@ buildvariants:
     push_bucket: downloads.10gen.com
     push_name: linux
     push_arch: x86_64-enterprise-rhel57
-    compile_flags: --ssl --distmod=rhel57 -j$(grep -c ^processor /proc/cpuinfo) --release --cc=/opt/mongodbtoolchain/bin/gcc --cxx=/opt/mongodbtoolchain/bin/g++ --variant-dir="linux2/release"
+    compile_flags: --ssl --distmod=rhel57 -j$(grep -c ^processor /proc/cpuinfo) --release --cc=/opt/mongodbtoolchain/bin/gcc CCFLAGS="-fpie" LINKFLAGS="-pie" --cxx=/opt/mongodbtoolchain/bin/g++ --variant-dir="linux2/release"
     test_flags: --continue-on-failure
     has_packages: true
     packager_script: packager-enterprise.py
@@ -3479,7 +3639,7 @@ buildvariants:
     push_bucket: downloads.10gen.com
     push_name: linux
     push_arch: x86_64-enterprise-rhel62
-    compile_flags: --ssl --distmod=rhel62 -j$(grep -c ^processor /proc/cpuinfo) --release --cc=/opt/mongodbtoolchain/bin/gcc --cxx=/opt/mongodbtoolchain/bin/g++ --variant-dir="linux2/release"
+    compile_flags: --ssl --distmod=rhel62 -j$(grep -c ^processor /proc/cpuinfo) --release --cc=/opt/mongodbtoolchain/bin/gcc CCFLAGS="-fpie" LINKFLAGS="-pie" --cxx=/opt/mongodbtoolchain/bin/g++ --variant-dir="linux2/release"
     test_flags: --continue-on-failure
     has_packages: true
     packager_script: packager-enterprise.py
@@ -3516,7 +3676,7 @@ buildvariants:
     push_bucket: downloads.10gen.com
     push_name: linux
     push_arch: x86_64-enterprise-rhel70
-    compile_flags: --ssl --distmod=rhel70 -j$(grep -c ^processor /proc/cpuinfo) --release --cc=/opt/mongodbtoolchain/bin/gcc --cxx=/opt/mongodbtoolchain/bin/g++ --variant-dir="linux2/release"
+    compile_flags: --ssl --distmod=rhel70 -j$(grep -c ^processor /proc/cpuinfo) --release --cc=/opt/mongodbtoolchain/bin/gcc CCFLAGS="-fpie" LINKFLAGS="-pie" --cxx=/opt/mongodbtoolchain/bin/g++ --variant-dir="linux2/release"
     test_flags: --continue-on-failure
     has_packages: true
     packager_script: packager-enterprise.py
@@ -3550,7 +3710,8 @@ buildvariants:
     push_bucket: downloads.mongodb.org
     push_name: linux
     push_arch: x86_64-rhel55
-    compile_flags: --ssl --distmod=rhel55 -j$(grep -c ^processor /proc/cpuinfo) --release --cc=/opt/mongodbtoolchain/bin/gcc --cxx=/opt/mongodbtoolchain/bin/g++ --variant-dir="linux2/release"
+    ld_library_path: LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/tmp/usr/local/ssl/lib
+    compile_flags: --ssl -j$(grep -c ^processor /proc/cpuinfo) --release --cc=/opt/mongodbtoolchain/bin/gcc CCFLAGS="-fpie" LINKFLAGS="-pie" --cxx=/opt/mongodbtoolchain/bin/g++ --variant-dir="linux2/release" --libpath=/tmp/usr/local/ssl/lib --cpppath=/tmp/usr/local/ssl/include --static-libstdc++  --distmod=rhel55-static-ssl101 -j$(grep -c ^processor /proc/cpuinfo) --release --use-new-tools all dist
     test_flags: --continue-on-failure
     has_packages: true
     packager_script: packager.py
@@ -3628,7 +3789,7 @@ buildvariants:
     push_bucket: downloads.mongodb.org
     push_name: linux
     push_arch: x86_64-rhel62
-    compile_flags: --ssl --distmod=rhel62 -j$(grep -c ^processor /proc/cpuinfo) --release --cc=/opt/mongodbtoolchain/bin/gcc --cxx=/opt/mongodbtoolchain/bin/g++ --variant-dir="linux2/release"
+    compile_flags: --ssl --distmod=rhel62 -j$(grep -c ^processor /proc/cpuinfo) --release --cc=/opt/mongodbtoolchain/bin/gcc CCFLAGS="-fpie" LINKFLAGS="-pie" --cxx=/opt/mongodbtoolchain/bin/g++ --variant-dir="linux2/release"
     test_flags: --continue-on-failure
     has_packages: true
     packager_script: packager.py
@@ -3707,7 +3868,7 @@ buildvariants:
     push_bucket: downloads.mongodb.org
     push_name: linux
     push_arch: x86_64-rhel70
-    compile_flags: --ssl --distmod=rhel70 -j$(grep -c ^processor /proc/cpuinfo) --release --cc=/opt/mongodbtoolchain/bin/gcc --cxx=/opt/mongodbtoolchain/bin/g++ --variant-dir="linux2/release"
+    compile_flags: --ssl --distmod=rhel70 -j$(grep -c ^processor /proc/cpuinfo) --release --cc=/opt/mongodbtoolchain/bin/gcc CCFLAGS="-fpie" LINKFLAGS="-pie" --cxx=/opt/mongodbtoolchain/bin/g++ --variant-dir="linux2/release"
     test_flags: --continue-on-failure
     has_packages: true
     packager_script: packager.py
@@ -3791,7 +3952,7 @@ buildvariants:
     push_bucket: downloads.10gen.com
     push_name: linux
     push_arch: x86_64-enterprise-ubuntu1204
-    compile_flags: --ssl --distmod=ubuntu1204 --release -j$(grep -c ^processor /proc/cpuinfo) --cc=/opt/mongodbtoolchain/bin/gcc --cxx=/opt/mongodbtoolchain/bin/g++ --variant-dir="linux2/release"
+    compile_flags: --ssl --distmod=ubuntu1204 --release -j$(grep -c ^processor /proc/cpuinfo) --cc=/opt/mongodbtoolchain/bin/gcc CCFLAGS="-fpie" LINKFLAGS="-pie" --cxx=/opt/mongodbtoolchain/bin/g++ --variant-dir="linux2/release"
     test_flags: --authMechanism=SCRAM-SHA-1 --continue-on-failure
     has_packages: true
     packager_script: packager-enterprise.py
@@ -3828,7 +3989,7 @@ buildvariants:
     push_bucket: downloads.10gen.com
     push_name: linux
     push_arch: x86_64-enterprise-ubuntu1404
-    compile_flags: --ssl --distmod=ubuntu1404 --release -j$(grep -c ^processor /proc/cpuinfo) --cc=/opt/mongodbtoolchain/bin/gcc --cxx=/opt/mongodbtoolchain/bin/g++ --variant-dir="linux2/release"
+    compile_flags: --ssl --distmod=ubuntu1404 --release -j$(grep -c ^processor /proc/cpuinfo) --cc=/opt/mongodbtoolchain/bin/gcc CCFLAGS="-fpie" LINKFLAGS="-pie" --cxx=/opt/mongodbtoolchain/bin/g++ --variant-dir="linux2/release"
     test_flags: --authMechanism=SCRAM-SHA-1 --continue-on-failure
     has_packages: true
     packager_script: packager-enterprise.py
@@ -3869,7 +4030,7 @@ buildvariants:
     push_bucket: downloads.10gen.com
     push_name: linux
     push_arch: x86_64-enterprise-suse11
-    compile_flags: --ssl --distmod=suse11 --release -j$(grep -c ^processor /proc/cpuinfo) --cc=/opt/mongodbtoolchain/bin/gcc --cxx=/opt/mongodbtoolchain/bin/g++ --variant-dir="linux2/release"
+    compile_flags: --ssl --distmod=suse11 --release -j$(grep -c ^processor /proc/cpuinfo) --cc=/opt/mongodbtoolchain/bin/gcc CCFLAGS="-fpie" LINKFLAGS="-pie" --cxx=/opt/mongodbtoolchain/bin/g++ --variant-dir="linux2/release"
     test_flags: --authMechanism=SCRAM-SHA-1 --continue-on-failure
     has_packages: true
     packager_script: packager-enterprise.py
@@ -3905,7 +4066,7 @@ buildvariants:
     push_bucket: downloads.mongodb.org
     push_name: linux
     push_arch: x86_64-suse11
-    compile_flags: --ssl --distmod=suse11 -j$(grep -c ^processor /proc/cpuinfo) --release --cc=/opt/mongodbtoolchain/bin/gcc --cxx=/opt/mongodbtoolchain/bin/g++ --variant-dir="linux2/release"
+    compile_flags: --ssl --distmod=suse11 -j$(grep -c ^processor /proc/cpuinfo) --release --cc=/opt/mongodbtoolchain/bin/gcc CCFLAGS="-fpie" LINKFLAGS="-pie" --cxx=/opt/mongodbtoolchain/bin/g++ --variant-dir="linux2/release"
     test_flags: --continue-on-failure
     has_packages: true
     packager_script: packager.py
@@ -3989,7 +4150,7 @@ buildvariants:
     push_arch: x86_64
     gorootvars: PATH=/opt/mongodbtoolchain/v2/bin:$PATH
     tooltags: -gccgoflags "-lsocket -lnsl"
-    compile_flags: --cc=/opt/mongodbtoolchain/bin/gcc --cxx=/opt/mongodbtoolchain/bin/g++ --static-libstdc++ --64 -j$(kstat cpu | sort -u | grep -c "^module") --release OBJCOPY=/opt/mongodbtoolchain/bin/objcopy
+    compile_flags: --cc=/opt/mongodbtoolchain/bin/gcc CCFLAGS="-fpie" LINKFLAGS="-pie" --cxx=/opt/mongodbtoolchain/bin/g++ --static-libstdc++ --64 -j$(kstat cpu | sort -u | grep -c "^module") --release OBJCOPY=/opt/mongodbtoolchain/bin/objcopy
     test_flags: --continue-on-failure
   tasks:
   - name: compile
@@ -4038,7 +4199,7 @@ buildvariants:
     push_bucket: downloads.10gen.com
     push_name: linux
     push_arch: x86_64-enterprise-debian71
-    compile_flags: --ssl --distmod=debian71 --release -j$(grep -c ^processor /proc/cpuinfo) --cc=/opt/mongodbtoolchain/bin/gcc --cxx=/opt/mongodbtoolchain/bin/g++ --variant-dir="linux2/release"
+    compile_flags: --ssl --distmod=debian71 --release -j$(grep -c ^processor /proc/cpuinfo) --cc=/opt/mongodbtoolchain/bin/gcc CCFLAGS="-fpie" LINKFLAGS="-pie" --cxx=/opt/mongodbtoolchain/bin/g++ --variant-dir="linux2/release"
     test_flags: --authMechanism=SCRAM-SHA-1 --continue-on-failure
     has_packages: true
     packager_script: packager-enterprise.py
@@ -4074,7 +4235,7 @@ buildvariants:
     push_bucket: downloads.mongodb.org
     push_name: linux
     push_arch: x86_64-debian71
-    compile_flags: --ssl --distmod=debian71 -j$(grep -c ^processor /proc/cpuinfo) --release --cc=/opt/mongodbtoolchain/bin/gcc --cxx=/opt/mongodbtoolchain/bin/g++ --variant-dir="linux2/release"
+    compile_flags: --ssl --distmod=debian71 -j$(grep -c ^processor /proc/cpuinfo) --release --cc=/opt/mongodbtoolchain/bin/gcc CCFLAGS="-fpie" LINKFLAGS="-pie" --cxx=/opt/mongodbtoolchain/bin/g++ --variant-dir="linux2/release"
     test_flags: --continue-on-failure
     has_packages: true
     packager_script: packager.py
