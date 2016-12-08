@@ -3079,7 +3079,7 @@ buildvariants:
     push_arch: x86_64
     # msi_target: msi
     content_type: application/zip
-    compile_flags: --release --64 --ssl --distmod=ssl --extrapath="c:/openssl" -j$(grep -c ^processor /proc/cpuinfo) --dynamic-windows
+    compile_flags: --release --64 --ssl --distmod=ssl --extrapath="c:/openssl" -j$(grep -c ^processor /proc/cpuinfo)
     test_flags: --continue-on-failure
     ext: zip
   tasks:
@@ -3314,7 +3314,7 @@ buildvariants:
     push_arch: x86_64-2008plus-ssl
     msi_target: msi
     content_type: application/zip
-    compile_flags: --release --64 --ssl --distmod=2008plus-ssl --extrapath="c:\openssl" -j$(grep -c ^processor /proc/cpuinfo) --dynamic-windows --win-version-min=ws08r2
+    compile_flags: --release --64 --ssl --distmod=2008plus-ssl --extrapath="c:\openssl" -j$(grep -c ^processor /proc/cpuinfo) --win-version-min=ws08r2
     test_flags: --continue-on-failure
     ext: zip
   tasks:
