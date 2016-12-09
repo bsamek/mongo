@@ -4150,7 +4150,7 @@ buildvariants:
     push_arch: x86_64
     gorootvars: PATH=/opt/mongodbtoolchain/v2/bin:$PATH
     tooltags: -gccgoflags "-lsocket -lnsl"
-    compile_flags: --cc=/opt/mongodbtoolchain/bin/gcc CCFLAGS="-fpie" LINKFLAGS="-pie" --cxx=/opt/mongodbtoolchain/bin/g++ --static-libstdc++ --64 -j$(kstat cpu | sort -u | grep -c "^module") --release OBJCOPY=/opt/mongodbtoolchain/bin/objcopy
+    compile_flags: --ssl --cc=/opt/mongodbtoolchain/bin/gcc CCFLAGS="-fpie" LINKFLAGS="-pie" --cxx=/opt/mongodbtoolchain/bin/g++ --static-libstdc++ --64 -j$(kstat cpu | sort -u | grep -c "^module") --release OBJCOPY=/opt/mongodbtoolchain/bin/objcopy
     test_flags: --continue-on-failure
   tasks:
   - name: compile
