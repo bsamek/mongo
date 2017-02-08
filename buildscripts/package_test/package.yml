@@ -1,0 +1,243 @@
+tests:
+  - name: install_mongodb_debian
+    suites:
+      - debian71_install
+      - debian81_install
+      - ubuntu1204_install
+      - ubuntu1404_install
+      - ubuntu1604_install
+    type: run-bash-script-no-output-check
+    args:
+      source: |
+        set -o errexit
+        tar xzvf artifacts.tgz
+        sudo apt-get update
+        sudo apt-get install openssl
+        # dpkg will not return 0, because dependencies will not be satisfied. We
+        # check later to make sure mongodb is running.
+        sudo dpkg -i `find . -name "*server*.deb"` || true
+        sudo apt-get update && apt-get -y -f install
+        sudo dpkg -i `find . -name "*shell*.deb"`
+
+  - name: install_mongodb_rhel
+    suites:
+      - amazon_install
+      - rhel62_install
+      - rhel70_install
+    type: run-bash-script-no-output-check
+    args:
+      source: |
+        set -o errexit
+        tar xzvf artifacts.tgz
+        sudo sed '/Defaults[[:space:]]*requiretty/d' /etc/sudoers
+        sudo rm /etc/security/limits.d/90-nproc.conf
+        sudo yum install -y `find . -name "*server*.rpm"`
+        sudo yum install -y `find . -name "*shell*.rpm"`
+
+  - name: install_mongodb_suse
+    suites:
+      - suse11_install
+      - suse12_install
+    type: run-bash-script-no-output-check
+    args:
+      source: |
+        set -o errexit
+        tar xzvf artifacts.tgz
+        retry_counter=0
+        while true; do
+            sudo zypper refresh && break
+            retry_counter=$(($retry_counter + 1))
+            [ "$retry_counter" = "12" ] && exit 1
+            sleep 10
+        done
+        sudo zypper -n install `find . -name "*server*.rpm"`
+        sudo zypper -n install `find . -name "*shell*.rpm"`
+
+  - name: restart
+    suites:
+      - amazon_restart
+      - debian71_restart
+      - debian81_restart
+      - rhel62_restart
+      - rhel70_restart
+      - suse11_restart
+      - suse12_restart
+      - ubuntu1204_restart
+      - ubuntu1404_restart
+      - ubuntu1604_restart
+    type: run-bash-script-no-output-check
+    args:
+      source: |
+        set -o errexit
+        sudo service mongod stop
+        sudo service mongod start
+        pgrep mongod
+        sudo service mongod stop
+        if ! pgrep mongod; then true; else false; fi
+        sudo service mongod restart
+        pgrep mongod
+
+  - name: files_all
+    suites:
+      - amazon_verify
+      - debian71_verify
+      - debian81_verify
+      - rhel62_verify
+      - rhel70_verify
+      - suse11_verify
+      - suse12_verify
+      - ubuntu1204_verify
+      - ubuntu1404_verify
+      - ubuntu1604_verify
+    type: file-group-all
+    args:
+      files:
+        name: /etc/mongod.conf
+        name: /usr/bin/mongod
+        name: /var/log/mongodb/mongod.log
+
+  - name: files_sysvinit
+    suites:
+      - debian71_verify
+      - redhat62_verify
+      - suse11_verify
+      - ubuntu1204_verify
+    type: file-exists
+    args:
+      name: /etc/init.d/mongod
+
+  - name: files_verifyd
+    suites:
+      - debian81_verify
+      - rhel70_verify
+      - suse12_verify
+      - ubuntu1604_verify
+    type: file-exists
+    args:
+      name: /lib/systemd/system/mongod.service
+
+  - name: files_rpm
+    suites:
+      - amazon_verify
+      - rhel62_verify
+      - rhel70_verify
+      - suse11_verify
+      - suse12_verify
+    type: file-group-all
+    args:
+      files:
+        name: /var/lib/mongo
+        name: /var/run/mongodb
+
+  - name: files_deb
+    suites:
+      - debian71_verify
+      - debian81_verify
+      - ubuntu1204_verify
+      - ubuntu1404_verify
+      - ubuntu1604_verify
+    type: file-exists
+    args:
+      name: /var/lib/mongodb
+
+  - name: users_rpm
+    suites:
+      - amazon_verify
+      - rhel62_verify
+      - rhel70_verify
+      - suse11_verify
+      - suse12_verify
+    type: run-bash-script-no-output-check
+    args:
+      source: |
+        set -o errexit
+        test `getent passwd mongod | cut -d: -f6` = "/var/lib/mongo"
+        test `getent passwd mongod | cut -d: -f7` = "/bin/false"
+        groups mongod | grep mongod
+
+  - name: users_deb
+    suites:
+      - debian71_verify
+      - debian81_verify
+      - ubuntu1204_verify
+      - ubuntu1404_verify
+      - ubuntu1604_verify
+    type: run-bash-script-no-output-check
+    args:
+      source: |
+        set -o errexit
+        test `getent passwd mongod | cut -d: -f7` = "/bin/false"
+        groups mongod | grep mongodb
+
+  - name: ulimits
+    suites:
+      - amazon_verify
+      - debian71_verify
+      - debian81_verify
+      - rhel62_verify
+      - rhel70_verify
+      - suse11_verify
+      - suse12_verify
+      - ubuntu1204_verify
+      - ubuntu1404_verify
+      - ubuntu1604_verify
+    type: run-bash-script-no-output-check
+    args:
+      source: |
+        set -o errexit
+        cat /proc/$(pgrep mongod)/limits | grep "Max file size\s*unlimited"
+        cat /proc/$(pgrep mongod)/limits | grep "Max cpu time\s*unlimited"
+        cat /proc/$(pgrep mongod)/limits | grep "Max address space\s*unlimited"
+        cat /proc/$(pgrep mongod)/limits | grep "Max open files\s*64000"
+        cat /proc/$(pgrep mongod)/limits | grep "Max resident set\s*unlimited"
+        cat /proc/$(pgrep mongod)/limits | grep "Max processes\s*64000"
+
+  - name: write
+    suites:
+      - amazon_verify
+      - debian71_verify
+      - debian81_verify
+      - rhel62_verify
+      - rhel70_verify
+      - suse11_verify
+      - suse12_verify
+      - ubuntu1204_verify
+      - ubuntu1404_verify
+      - ubuntu1604_verify
+    type: run-bash-script-no-output-check
+    args:
+      source: |
+        mongo --eval "db.smoke.insert({answer: 42})" | grep "nInserted\" : 1"
+        mongo --eval "db.smoke.findOne()" | grep "answer\" : 42"
+
+  - name: uninstall_mongodb_debian
+    suites:
+      - debian71_uninstall
+      - debian81_uninstall
+      - ubuntu1204_uninstall
+      - ubuntu1404_uninstall
+      - ubuntu1604_uninstall
+    type: run-bash-script-no-output-check
+    args:
+      source: |
+        sudo dpkg -r $(dpkg -l | grep "mongodb.*server" | awk '{print $2}')
+      output: pass
+
+  - name: uninstall_mongodb_rhel
+    suites:
+      - amazon_uninstall
+      - rhel62_uninstall
+      - rhel70_uninstall
+    type: run-bash-script-no-output-check
+    args:
+      source: |
+        sudo rpm -e $(rpm -qa | grep "mongodb.*server" | awk '{print $1}')
+
+  - name: uninstall_mongodb_suse
+    suites:
+      - suse11_uninstall
+      - suse12_uninstall
+    type: run-bash-script-no-output-check
+    args:
+      source: |
+        sudo rpm -e $(rpm -qa | grep "mongodb.*server" | awk '{print $1}')
