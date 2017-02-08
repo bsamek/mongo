@@ -822,7 +822,7 @@ functions:
           kill_process "$process"
         done
 
-  "set up kitchen credentials":
+  "set up package test credentials":
     command: shell.exec
     params:
       silent: true
@@ -844,7 +844,7 @@ functions:
         aws_secret_access_key = ${kitchen_aws_secret}
         EOF
 
-  "run kitchen":
+  "run package test":
     command: shell.exec
     type: test
     params:
@@ -852,31 +852,24 @@ functions:
       working_dir: src/buildscripts/package_test
       script: |
         set -o errexit
+        set -o verbose
 
-        export KITCHEN_ARTIFACTS_URL="https://s3.amazonaws.com/mciuploads/${project}/${build_variant}/${revision}/artifacts/${build_id}.tgz"
-        export KITCHEN_SECURITY_GROUP="${kitchen_security_group}"
-        export KITCHEN_SSH_KEY_ID="${kitchen_ssh_key_id}"
-        export KITCHEN_SUBNET="${kitchen_subnet}"
+        git clone git@github.com:10gen/mongo-release-tools.git
+        make -C mongo-release-tools install
+        pushd mongo-release-tools
+        eval `make activate`
+        popd
 
-        for i in {1..3}
-        do
-          if ! kitchen converge "${packager_distro}"; then
-            converged="false"
-            kitchen destroy "${packager_distro}" || true
-            sleep 30
-          else
-            break
-          fi
-        done
-
-        test "$converged" != "false"
-
-        if ! kitchen verify "${packager_distro}"; then
-          verified="false"
-        fi
-
-        kitchen destroy "${packager_distro}" || true
-        test "$verified" != "false"
+        mr greenbay --build_id ${build_id} \
+                    --revision ${revision} \
+                    --instance_type ${instance_type|m3.medium} \
+                    --username ${admin_user_name} \
+                    --keyname kitchen \
+                    --greenbay ${greenbay_cmd|greenbay} \
+                    # --suite ${build_variant|all} \
+                    --conf greenbay.yaml
+                    --upload greenbay.yaml
+                    --ami ${base_ami}
 
 pre:
   - func: "kill processes"
@@ -2851,8 +2844,8 @@ tasks:
   - name: compile
   commands:
     - func: "fetch artifacts"
-    - func: "set up kitchen credentials"
-    - func: "run kitchen"
+    - func: "set up package test credentials"
+    - func: "run package test"
 
 - name: push
   patchable: false
@@ -3775,6 +3768,8 @@ buildvariants:
     repo_edition: org
     use_scons_cache: true
     build_mongoreplay: true
+    base_ami: ami-3fec7956
+    admin_username: ubuntu
   tasks:
   - name: compile
     distros:
@@ -3898,6 +3893,8 @@ buildvariants:
     repo_edition: org
     use_scons_cache: true
     build_mongoreplay: true
+    base_ami: ami-1d8c9574
+    admin_username: ubuntu
   tasks:
   - name: compile
     distros:
@@ -4030,6 +4027,8 @@ buildvariants:
     repo_edition: org
     use_scons_cache: true
     build_mongoreplay: true
+    base_ami: ami-64140d0e
+    admin_username: ubuntu
   tasks:
   - name: compile
     distros:
@@ -4513,6 +4512,8 @@ buildvariants:
     repo_edition: enterprise
     use_scons_cache: true
     build_mongoreplay: true
+    base_ami: ami-c481fad3
+    admin_username: ec2-user
   tasks:
   - name: compile
     distros:
@@ -4605,6 +4606,8 @@ buildvariants:
     repo_edition: org
     use_scons_cache: true
     build_mongoreplay: true
+    base_ami: ami-c481fad3
+    admin_username: ec2-user
   tasks:
   - name: compile
     distros:
@@ -5675,6 +5678,8 @@ buildvariants:
     repo_edition: enterprise
     use_scons_cache: true
     build_mongoreplay: true
+    base_ami: ami-a35a33ca
+    admin_username: root
   tasks:
   - name: compile
     requires:
@@ -6135,6 +6140,8 @@ buildvariants:
     repo_edition: enterprise
     use_scons_cache: true
     build_mongoreplay: true
+    base_ami: ami-60a1e808
+    admin_username: root
   tasks:
   - name: compile
     distros:
@@ -6199,6 +6206,8 @@ buildvariants:
     repo_edition: org
     use_scons_cache: true
     build_mongoreplay: true
+    base_ami: ami-a35a33ca
+    admin_username: root
   tasks:
   - name: compile
     distros:
@@ -6323,6 +6332,8 @@ buildvariants:
     repo_edition: org
     use_scons_cache: true
     build_mongoreplay: true
+    base_ami: ami-60a1e808
+    admin_username: root
   tasks:
   - name: compile
     distros:
@@ -6746,6 +6757,8 @@ buildvariants:
     repo_edition: enterprise
     use_scons_cache: true
     build_mongoreplay: true
+    base_ami: ami-3fec7956
+    admin_username: ubuntu
   tasks:
   - name: compile
     distros:
@@ -6809,6 +6822,8 @@ buildvariants:
     repo_edition: enterprise
     use_scons_cache: true
     build_mongoreplay: true
+    base_ami: ami-1d8c9574
+    admin_username: ubuntu
   tasks:
   - name: compile
     distros:
@@ -6881,6 +6896,8 @@ buildvariants:
     repo_edition: enterprise
     use_scons_cache: true
     build_mongoreplay: true
+    base_ami: ami-64140d0e
+    admin_username: ubuntu
   tasks:
   - name: compile
     distros:
@@ -6968,6 +6985,8 @@ buildvariants:
     repo_edition: enterprise
     use_scons_cache: true
     build_mongoreplay: true
+    base_ami: ami-aeb532c6
+    admin_username: ec2-user
   tasks:
   - name: compile
     distros:
@@ -7128,6 +7147,8 @@ buildvariants:
     repo_edition: org
     use_scons_cache: true
     build_mongoreplay: true
+    base_ami: ami-aeb532c6
+    admin_username: ec2-user
   tasks:
   - name: compile
     distros:
@@ -7250,6 +7271,8 @@ buildvariants:
     packager_distro: suse11
     repo_edition: enterprise
     use_scons_cache: true
+    base_ami: ami-7f2e6015
+    admin_username: ec2-user
   tasks:
   - name: compile
     distros:
@@ -7402,6 +7425,8 @@ buildvariants:
     packager_distro: suse11
     repo_edition: org
     use_scons_cache: true
+    base_ami: ami-7f2e6015
+    admin_username: ec2-user
   tasks:
   - name: compile
     distros:
@@ -7623,6 +7648,8 @@ buildvariants:
     repo_edition: enterprise
     use_scons_cache: true
     build_mongoreplay: true
+    base_ami: ami-4b124a22
+    admin_username: admin
   tasks:
   - name: compile
     distros:
@@ -7686,6 +7713,8 @@ buildvariants:
     repo_edition: enterprise
     use_scons_cache: true
     build_mongoreplay: true
+    base_ami: ami-896d85e2
+    admin_username: admin
   tasks:
   - name: compile
     distros:
@@ -7749,6 +7778,8 @@ buildvariants:
     repo_edition: org
     use_scons_cache: true
     build_mongoreplay: true
+    base_ami: ami-4b124a22
+    admin_username: admin
   tasks:
   - name: compile
     distros:
@@ -7875,6 +7906,8 @@ buildvariants:
     repo_edition: org
     use_scons_cache: true
     build_mongoreplay: true
+    base_ami: ami-896d85e2
+    admin_username: admin
   tasks:
   - name: compile
     distros:
