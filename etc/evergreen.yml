@@ -888,6 +888,7 @@ functions:
                     --conf package.yml \
                     --upload artifacts.tgz,greenbay,mongo/buildscripts/package_test/package.yml \
                     --retry 1 \
+                    --parallel false \
                     --ami ${base_ami}
 
 pre:
