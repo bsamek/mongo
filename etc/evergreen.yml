@@ -830,8 +830,8 @@ functions:
         set -o errexit
 
         mkdir -p ~/.ssh ~/.aws
-        echo -n "${kitchen_private_key}" > ~/.ssh/kitchen.pem
-        chmod 0600 ~/.ssh/kitchen.pem
+        echo -n "${kitchen_private_key}" > ~/.ssh/mcipacker.pem
+        chmod 0600 ~/.ssh/mcipacker.pem
 
         cat <<EOF > ~/.aws/config
         [default]
@@ -855,27 +855,35 @@ functions:
         set -o verbose
 
         export GOPATH=$HOME
-        git clone git@github.com:mongodb/greenbay.git $GOPATH/src/github.com/mongodb/greenbay
+        git clone git@github.com:bsamek/greenbay.git $GOPATH/src/github.com/mongodb/greenbay
         pushd $GOPATH/src/github.com/mongodb/greenbay
+        git checkout skunk
         make greenbay
         cp greenbay $HOME
         popd
 
-        git clone git@github.com:10gen/mongo-release-tools.git
+        git clone git@github.com:bsamek/mongo-release-tools.git
+        push mongo-release-tools
+        git checkout skunk
+        popd
         make -C mongo-release-tools install
         pushd mongo-release-tools
         eval `make activate`
         popd
 
+        # curl https://s3.amazonaws.com/mciuploads/${project}/${build_variant}/${revision}/artifacts/${build_id}.tgz -o artifacts.tgz
+        curl https://s3.amazonaws.com/mciuploads/mongodb-mongo-master/enterprise-linux-64-amazon-ami/1b49f7f0e3d72662ddf81d7c3ed5254d874a0673/artifacts/mongodb_mongo_master_enterprise_linux_64_amazon_ami_1b49f7f0e3d72662ddf81d7c3ed5254d874a0673_17_02_09_16_13_01.tgz -o artifacts.tgz
+
         mr greenbay --build_id ${build_id} \
                     --revision ${revision} \
                     --instance_type ${instance_type|m3.medium} \
                     --username ${admin_user_name} \
-                    --keyname kitchen \
+                    --keyname mcipacker \
                     --greenbay ./greenbay
                     --suite ${build_variant}_install,${build_variant}_restart,${build_variant}_verify,${build_variant}_uninstall
-                    --conf greenbay.yaml
-                    --upload greenbay.yaml,https://s3.amazonaws.com/mciuploads/${project}/${build_variant}/${revision}/artifacts/${build_id}.tgz
+                    --conf package.yml
+                    --upload artifacts.tgz,greenbay,src/buildscripts/package_test/package.yml
+                    --retry 3
                     --ami ${base_ami}
 
 pre:
@@ -2847,8 +2855,6 @@ tasks:
       run_multiple_jobs: true
 
 - name: package
-  depends_on:
-  - name: compile
   commands:
     - func: "fetch artifacts"
     - func: "set up package test credentials"
