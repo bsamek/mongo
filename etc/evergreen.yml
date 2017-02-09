@@ -873,7 +873,6 @@ functions:
                     --username ${admin_user_name} \
                     --keyname kitchen \
                     --greenbay ./greenbay
-                    --security_group ${kitchen_security_group}
                     --suite ${build_variant}_install,${build_variant}_restart,${build_variant}_verify,${build_variant}_uninstall
                     --conf greenbay.yaml
                     --upload greenbay.yaml,https://s3.amazonaws.com/mciuploads/${project}/${build_variant}/${revision}/artifacts/${build_id}.tgz

@@ -91,10 +91,10 @@ tests:
       - ubuntu1604_verify
     type: file-group-all
     args:
-      files:
-        name: /etc/mongod.conf
-        name: /usr/bin/mongod
-        name: /var/log/mongodb/mongod.log
+      file_names:
+        - /etc/mongod.conf
+        - /usr/bin/mongod
+        - /var/log/mongodb/mongod.log
 
   - name: files_sysvinit
     suites:
@@ -125,9 +125,9 @@ tests:
       - suse12_verify
     type: file-group-all
     args:
-      files:
-        name: /var/lib/mongo
-        name: /var/run/mongodb
+      file_names:
+        - /var/lib/mongo
+        - /var/run/mongodb
 
   - name: files_deb
     suites:
