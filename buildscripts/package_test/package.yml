@@ -29,8 +29,8 @@ tests:
       source: |
         set -o errexit
         tar xzvf artifacts.tgz
-        sudo sed '/Defaults[[:space:]]*requiretty/d' /etc/sudoers
-        sudo rm /etc/security/limits.d/90-nproc.conf
+        sudo sed '/Defaults[[:space:]]*requiretty/d' /etc/sudoers || true
+        sudo rm /etc/security/limits.d/90-nproc.conf || true
         sudo yum install -y `find . -name "*server*.rpm"`
         sudo yum install -y `find . -name "*shell*.rpm"`
 

@@ -854,6 +854,13 @@ functions:
         set -o errexit
         set -o verbose
 
+        export GOPATH=$HOME
+        git clone git@github.com:mongodb/greenbay.git $GOPATH/src/github.com/mongodb/greenbay
+        pushd $GOPATH/src/github.com/mongodb/greenbay
+        make greenbay
+        cp greenbay $HOME
+        popd
+
         git clone git@github.com:10gen/mongo-release-tools.git
         make -C mongo-release-tools install
         pushd mongo-release-tools
@@ -865,10 +872,11 @@ functions:
                     --instance_type ${instance_type|m3.medium} \
                     --username ${admin_user_name} \
                     --keyname kitchen \
-                    --greenbay ${greenbay_cmd|greenbay} \
-                    # --suite ${build_variant|all} \
+                    --greenbay ./greenbay
+                    --security_group ${kitchen_security_group}
+                    --suite ${build_variant}_install,${build_variant}_restart,${build_variant}_verify,${build_variant}_uninstall
                     --conf greenbay.yaml
-                    --upload greenbay.yaml
+                    --upload greenbay.yaml,https://s3.amazonaws.com/mciuploads/${project}/${build_variant}/${revision}/artifacts/${build_id}.tgz
                     --ami ${base_ami}
 
 pre:
