@@ -10,26 +10,6 @@ post:
         script: |
           source ./dsienv.sh
           $DSI_PATH/bin/make_artifact.sh
-    - command: s3.put
-      params:
-        aws_key: ${aws_key}
-        aws_secret: ${aws_secret}
-        local_file: work/reports.tgz
-        remote_file: ${project}/${build_variant}/${revision}/${task_id}/${version_id}/logs/${task_name}-${build_id}.${ext|tgz}
-        bucket: mciuploads
-        permissions: public-read
-        content_type: ${content_type|application/x-gzip}
-        display_name: test-log
-    - command: s3.put
-      params:
-        aws_key: ${aws_key}
-        aws_secret: ${aws_secret}
-        local_file: work/reports/graphs/timeseries-p1.html
-        remote_file: ${project}/${build_variant}/${revision}/${task_id}/${version_id}/logs/timeseries-p1-${task_name}-${build_id}.html
-        bucket: mciuploads
-        permissions: public-read
-        content_type: text/html
-        display_name: timeseries-p1.html
     - command: attach.results
       params:
         file_location: work/report.json
@@ -347,16 +327,6 @@ tasks:
           fi
           tar cvf mongodb.tar mongodb
           gzip mongodb.tar
-    - command: s3.put
-      params:
-        aws_key: ${aws_key}
-        aws_secret: ${aws_secret}
-        local_file: src/mongodb.tar.gz
-        remote_file: ${project}/${version_id}/${revision}/${platform}/mongod-${version_id}.tar.gz
-        bucket: mciuploads
-        permissions: public-read
-        content_type: ${content_type|application/x-gzip}
-        display_name: mongodb.tar.gz
 
 - name: industry_benchmarks_WT
   depends_on:
@@ -793,31 +763,6 @@ modules:
 #######################################
 #         Linux Buildvariants         #
 #######################################
-
-buildvariants:
-- name: linux-1-node-replSet
-  display_name: Linux 1-Node ReplSet
-  batchtime: 1440 # 24 hours
-  modules: &modules
-    - dsi
-    - workloads
-  expansions:
-    setup: single-replica
-    cluster: single
-    platform: linux
-    project: &project dsi
-  run_on:
-      - "rhel70-perf-single"
-  tasks:
-    - name: industry_benchmarks_WT
-    - name: core_workloads_WT
-    - name: industry_benchmarks_MMAPv1
-    - name: core_workloads_MMAPv1
-    - name: non_sharded_workloads_WT
-    - name: non_sharded_workloads_MMAPv1
-    - name: agg_query_comparison_bestbuy_WT
-    - name: agg_query_comparison_bestbuy_MMAPv1
-
 - name: linux-standalone
   display_name: Linux Standalone
   batchtime: 1440 # 24 hours
@@ -845,92 +790,3 @@ buildvariants:
     - name: non_sharded_workloads_MMAPv1
     - name: agg_query_comparison_bestbuy_WT
     - name: agg_query_comparison_bestbuy_MMAPv1
-
-- name: linux-3-shard
-  display_name: Linux 3-Shard Cluster
-  batchtime: 10080 # 7 days
-  modules: *modules
-  expansions:
-    setup: shard
-    cluster: shard
-    platform: linux
-    project: *project
-  run_on:
-      - "rhel70-perf-shard"
-  tasks:
-    - name: industry_benchmarks_WT
-    - name: core_workloads_WT
-    - name: industry_benchmarks_MMAPv1
-    - name: core_workloads_MMAPv1
-    - name: mongos_workloads_WT
-    - name: mongos_workloads_MMAPv1
-    - name: move_chunk_workloads_WT
-    - name: move_chunk_workloads_MMAPv1
-    - name: agg_query_comparison_bestbuy_WT
-    - name: agg_query_comparison_bestbuy_MMAPv1
-
-- name: linux-3-node-replSet
-  display_name: Linux 3-Node ReplSet
-  batchtime: 1440  # 24 hours
-  modules: *modules
-  expansions:
-    setup: replica
-    cluster: replica
-    platform: linux
-    project: *project
-  run_on:
-      - "rhel70-perf-replset"
-  tasks:
-    - name: industry_benchmarks_WT
-    - name: core_workloads_WT
-    - name: industry_benchmarks_MMAPv1
-    - name: core_workloads_MMAPv1
-    - name: secondary_performance_WT
-    - name: secondary_performance_MMAPv1
-    - name: non_sharded_workloads_WT
-    - name: non_sharded_workloads_MMAPv1
-    - name: agg_query_comparison_bestbuy_WT
-    - name: agg_query_comparison_bestbuy_MMAPv1
-
-- name: linux-3-node-replSet-initialsync
-  display_name: Linux 3-Node ReplSet Initial Sync
-  batchtime: 1440  # 24 hours
-  modules: *modules
-  expansions:
-    setup: replica-2node
-    cluster: replica
-    platform: linux
-    project: *project
-  run_on:
-      - "rhel70-perf-replset"
-  tasks:
-    - name: initialsync_WT
-    - name: initialsync_MMAPv1
-
-- name: linux-replSet-initialsync-logkeeper
-  display_name: Linux ReplSet Initial Sync LogKeeper
-  batchtime: 10080 # 7 days
-  modules: *modules
-  expansions:
-    setup: initialsync-logkeeper
-    cluster: initialsync-logkeeper
-    platform: linux
-    project: *project
-  run_on:
-      - "rhel70-perf-initialsync-logkeeper"
-  tasks:
-    - name: initialsync-logkeeper_WT
-
-- name: linux-oplog-compare
-  display_name: Linux Oplog Compare
-  batchtime: 1440 # 24 hours
-  modules: *modules
-  expansions:
-    project: *project
-  run_on:
-      - "rhel70-perf-single"
-  tasks:
-    - name: industry_benchmarks_WT_oplog_comp
-    - name: core_workloads_WT_oplog_comp
-    - name: industry_benchmarks_MMAPv1_oplog_comp
-    - name: core_workloads_MMAPv1_oplog_comp
