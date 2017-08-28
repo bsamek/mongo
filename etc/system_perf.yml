@@ -767,7 +767,9 @@ buildvariants:
 - name: linux-standalone
   display_name: Linux Standalone
   batchtime: 1440 # 24 hours
-  modules: *modules
+  modules:
+    - dsi
+    - workloads
   expansions:
     compile_flags: -j$(grep -c ^processor /proc/cpuinfo) CC=/opt/mongodbtoolchain/v2/bin/gcc CXX=/opt/mongodbtoolchain/v2/bin/g++ OBJCOPY=/opt/mongodbtoolchain/v2/bin/objcopy
     setup: standalone
@@ -776,7 +778,7 @@ buildvariants:
     use_scons_cache: true
     gorootvars: GOROOT=/opt/go PATH="/opt/go/bin:$PATH"
     tooltags: ""
-    project: *project
+    project: dsi
   run_on:
       - "rhel70-perf-single"
   tasks:
