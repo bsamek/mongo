@@ -2,23 +2,9 @@ stepback: false
 command_type: system
 
 post:
-    - command: shell.exec
-      params:
-         working_dir: work
-         script: |
-           source ./dsienv.sh
-           $DSI_PATH/bin/make_artifact.sh
     - command: attach.results
       params:
         file_location: work/report.json
-    - command: shell.exec
-      params:
-        working_dir: work
-        script: |
-          source ./dsienv.sh
-          if [ -e /data/infrastructure_provisioning/terraform/provisioned.${cluster} ]; then
-            $DSI_PATH/bin/mark_idle.sh
-          fi
 
 functions:
   "prepare environment":
